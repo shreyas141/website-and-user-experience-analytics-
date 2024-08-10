@@ -115,22 +115,6 @@ class CommonUtils:
 
         return df
 
-    def comparison_of_test_groups(self, df: DataFrame) -> DataFrame:
-        """
-        This function compares the conversion rates of the two test groups and returns the result as a DataFrame.
-
-        Parameters:
-        df (pyspark.sql.DataFrame): The DataFrame containing the conversion rates of the two test groups (A/B testing).
-
-        Returns:
-        pyspark.sql.DataFrame: The DataFrame containing the comparison of the conversion rates of the two test groups.
-        """
-        # Compare the conversion rates of the two test groups
-        df = df.groupBy('testgroup').agg(sum(when(col('conversion') == True, 1).otherwise(0)).alias(
-            'Total_Conversion'), count(col('conversion')).alias('Total_Users'),  sum('Revenue')).withColumn('ConversionRate', expr("Total_Conversion / TotalUsers"))
-
-        return df
-
     def cross_device_analysis(self, df: DataFrame) -> DataFrame:
         """
         This function performs cross-device analysis on the given DataFrame and returns the result as a DataFrame.
@@ -199,7 +183,7 @@ class CommonUtils:
         df = frequet_users_df.join(high_value_users_df, 'userID', 'outer').join(
             bonuce_rate_user, 'userID', 'outer')
         return df
-    
+
     def conversion_attribution(self, df1: DataFrame, df2: DataFrame) -> DataFrame:
         """
         This function performs conversion attribution on the given DataFrames and returns the result as a DataFrame.
@@ -213,28 +197,35 @@ class CommonUtils:
         """
 
         # Join df1 and df2 on UserID and SessionID to create unified DataFrame
-        unified_df = df1.join(df2.select('userID', 'sessionID', 'conversion'), on=["UserID", "SessionID"], how="inner")
+        unified_df = df1.join(df2.select('userID', 'sessionID', 'conversion'), on=[
+                              "UserID", "SessionID"], how="inner")
 
         # Window specification for partitioning the DataFrame by UserID and SessionID and ordering by timestamp in descending order
-        window_spec = Window.partitionBy('userID', 'sessionID').orderBy(col('timestamp').desc())
+        window_spec = Window.partitionBy(
+            'userID', 'sessionID').orderBy(col('timestamp').desc())
 
         # Find the last page visited by the user before the conversion and filter the DataFrame to only include rows where the user converted
-        last_interaction_df = unified_df.withColumn('Last_Page_Before_Conversion', last('pageURL', True).over(window_spec)).filter(col('conversion') == True)
+        last_interaction_df = unified_df.withColumn('Last_Page_Before_Conversion', last(
+            'pageURL', True).over(window_spec)).filter(col('conversion') == True)
 
         # Select the required columns from the last_interaction_df
-        last_interaction_df = last_interaction_df.select('userID', 'sessionID', 'Last_Page_Before_Conversion', 'conversion')
+        last_interaction_df = last_interaction_df.select(
+            'userID', 'sessionID', 'Last_Page_Before_Conversion', 'conversion')
 
         # Group the unified_df by UserID and SessionID and calculate the count of PageURLs to get the touchpoint count
-        touchpoint_count_df = unified_df.groupBy("UserID", "SessionID").agg(count("PageURL").alias("Touchpoint_Count"))
+        touchpoint_count_df = unified_df.groupBy("UserID", "SessionID").agg(
+            count("PageURL").alias("Touchpoint_Count"))
 
         # Join the unified_df and touchpoint_count_df on UserID and SessionID
-        multi_touch_df = unified_df.join(touchpoint_count_df,on=["UserID", "SessionID"], how="inner")
+        multi_touch_df = unified_df.join(touchpoint_count_df, on=[
+                                         "UserID", "SessionID"], how="inner")
 
         # Calculate the touchpoint credit by dividing the conversion value by the touchpoint count
-        multi_touch_df = multi_touch_df.withColumn("Conversion", when(col("conversion") == True, 1).otherwise(0)).withColumn("Touchpoint_Credit", expr("Conversion / Touchpoint_Count"))
+        multi_touch_df = multi_touch_df.withColumn("Conversion", when(col("conversion") == True, 1).otherwise(
+            0)).withColumn("Touchpoint_Credit", expr("Conversion / Touchpoint_Count"))
 
         # Select the required columns from the multi_touch_df and filter the DataFrame to only include rows where the user converted
-        multi_touch_attribution_df = multi_touch_df.select("UserID", "SessionID", "PageURL", "Touchpoint_Credit").filter(col("Conversion") == True)
+        multi_touch_attribution_df = multi_touch_df.select(
+            "UserID", "SessionID", "PageURL", "Touchpoint_Credit").filter(col("Conversion") == True)
 
         return last_interaction_df, multi_touch_attribution_df
-
