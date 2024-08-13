@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
 from utilities.utils import *
+import functools
 
 
 # Entry point of the program
